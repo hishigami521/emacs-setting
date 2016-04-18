@@ -1,0 +1,207 @@
+;;;; -*- mode: lisp-interaction; syntax: elisp; coding: iso-2022-7bit -*-
+;;;;
+;;;; Copyright (C) 2001 The Meadow Team
+
+(add-to-list 'load-path "~/.emacs.d/color-theme-6.6.0")
+(require 'color-theme)
+(eval-after-load "color-theme"
+  '(progn
+     (color-theme-initialize)
+     (color-theme-taylor)))
+
+;; setting for emacs 
+;;; setting for backup and save file
+(setq make-backup-files nil)
+(setq auto-save-default nil)
+(setq delete-auto-save-files t)
+
+;; set menu bar & scroll bar
+(tool-bar-mode -1)
+(menu-bar-mode -1)
+(toggle-scroll-bar nil)
+
+;; set truncation
+(setq truncate-lines nil)
+(setq truncate-partial-width-windows nil)
+
+;; load path
+(setq load-path (cons "/cygdrive/c/Meadow/site-lisp" load-path))
+(setq load-path (cons "/cygdrive/c//Meadow/site-lisp/w3m" load-path))
+
+;;; japanese
+;; 文字コード
+(set-language-environment "Japanese")
+(let ((ws window-system))
+  (cond ((eq ws 'w32)
+         (prefer-coding-system 'utf-8-unix)
+         (set-default-coding-systems 'utf-8-unix)
+         (setq file-name-coding-system 'sjis)
+         (setq locale-coding-system 'utf-8))
+        ((eq ws 'ns)
+         (require 'ucs-normalize)
+         (prefer-coding-system 'utf-8-hfs)
+         (setq file-name-coding-system 'utf-8-hfs)
+         (setq locale-coding-system 'utf-8-hfs))))
+
+;;; key-bind
+(global-set-key "\C-h" 'delete-backward-char) ;
+(global-set-key "\M-g" 'goto-line) ;
+(define-key global-map "\C-cc" 'comment-region) ; comment-region
+
+(show-paren-mode 1);
+(setq show-paren-style 'mixed);
+
+;; ;;; IME
+(mw32-ime-initialize)
+(setq default-input-method "MW32-IME")
+(setq-default mw32-ime-mode-line-state-indicator "[--]")
+(setq mw32-ime-mode-line-state-indicator-list '("[--]" "[あ]" "[--]"))
+(add-hook 'mw32-ime-on-hook
+	  (function (lambda () (set-cursor-height 2))))
+(add-hook 'mw32-ime-off-hook
+	  (function (lambda () (set-cursor-height 4))))
+
+
+;;; mouse 
+(setq w32-hide-mouse-on-key t)
+(setq w32-hide-mouse-timeout 5000)
+
+
+;;; setting for font-lock
+(global-font-lock-mode t)
+
+
+;;; setting for frame
+(setq default-frame-alist
+      (append (list '(width . 80)
+		    '(height . 51)
+		    '(top . 0)
+		    '(left . 0))
+	      default-frame-alist))
+
+;; ;;; Cygwin bash
+(setq explicit-shell-file-name "bash")
+(setq shell-file-name "sh")
+(setq shell-command-switch "-c") 
+
+;;; argument-editing
+(require 'mw32script)
+(mw32script-init)
+
+;; setting for aspell
+(setq ispell-program-name "aspell")
+(setq ispell-grep-command "grep")
+(eval-after-load "ispell"
+  '(add-to-list 'ispell-skip-region-alist '("[^000-\377]")))
+
+;; swap-screen
+(defun swap-screen()
+  "Swap two screen,leaving cursor at current window."
+  (interactive)
+  (let ((thiswin (selected-window))
+        (nextbuf (window-buffer (next-window))))
+    (set-window-buffer (next-window) (window-buffer))
+    (set-window-buffer thiswin nextbuf)))
+(defun swap-screen-with-cursor()
+  "Swap two screen,with cursor in same buffer."
+  (interactive)
+  (let ((thiswin (selected-window))
+        (thisbuf (window-buffer)))
+    (other-window 1)
+    (set-window-buffer thiswin (window-buffer))
+    (set-window-buffer (selected-window) thisbuf)))
+(global-set-key [f2] 'swap-screen)
+(global-set-key [S-f2] 'swap-screen-with-cursor)
+
+;;; Inline compile for LaTeX
+(setq tex-start-commands nil)
+(setq latex-run-command "pdflatex -shell-escape")
+(setq tex-bibtex-command "bibtex")
+(setq platex-run-command "platex -shell-escape")
+(setq tex-dvipdf-command "dvipdfmx")
+(setq tex-pbibtex-command "pbibtex")
+(setq tex-view-pdf-command "SumatraPDF")
+
+(setq tex-fontify-script nil)
+
+(defun tex-get-temp-cmd ()
+  "Check the head line of the current buffer, and if it begins by %#!, return the command following it."
+  (let ((head-of-buffer (car (split-string (buffer-string) "\n"))))
+    (if (and (>= (length head-of-buffer) 3)
+             (string= (substring head-of-buffer 0 3) "%#!"))
+        (substring head-of-buffer 3))))
+
+(defun my-tex-bibtex-file (&optional arg)
+  "Run BibTeX on the current buffer's file."
+  (interactive "P")
+  (if (tex-shell-running)
+      (tex-kill-job)
+    (tex-start-shell))
+  (let* (shell-dirtrack-verbose
+         (source-file (tex-main-file))
+         (tex-out-file
+          (tex-append (file-name-nondirectory source-file) ""))
+         (file-dir (file-name-directory (expand-file-name source-file))))
+    (tex-send-command tex-shell-cd-command file-dir)
+    (if (consp arg)
+        (tex-send-command tex-pbibtex-command tex-out-file)
+      (tex-send-command tex-bibtex-command tex-out-file)))
+  (tex-display-shell))
+
+(defun my-latex-file (&optional arg)
+  "Prompt to save all buffers and run LaTeX on current buffer's file.
+This function is more useful than \\[tex-buffer] when you need the
+`.aux' file of LaTeX to have the correct name."
+  (interactive "P")
+  (when tex-offer-save
+    (save-some-buffers))
+  (let* ((source-file (tex-main-file))
+         (file-dir (file-name-directory (expand-file-name source-file))))
+    (if (tex-shell-running)
+        (tex-kill-job)
+      (tex-start-shell))
+    (setq tex-temp-cmd (tex-get-temp-cmd))
+    (cond (tex-temp-cmd
+           (if (<= (length (split-string tex-temp-cmd)) 1)
+               (setq tex-temp-cmd (concat tex-temp-cmd " " source-file)))
+           (tex-send-tex-command tex-temp-cmd file-dir))
+          (t
+           (if (not (consp arg))
+               (tex-start-tex latex-run-command source-file file-dir)
+             (tex-start-tex platex-run-command source-file file-dir)
+             (setq tex-print-file (expand-file-name source-file))
+             (let ((print-file-name-dvi (tex-append tex-print-file ".dvi")))
+               (tex-send-command tex-dvipdf-command print-file-name-dvi nil)))))))
+
+(defun tex-view-pdf (&optional arg)
+  "Run PDF viewer."
+  (interactive "P")
+  (if (tex-shell-running)
+      (tex-kill-job)
+    (tex-start-shell))
+  (let ((view-file-name-pdf (tex-append (buffer-file-name) ".pdf")))
+    (tex-send-command tex-view-pdf-command view-file-name-pdf t)))
+
+;; tex-mode hook
+(add-hook 'latex-mode-hook
+	  (lambda ()
+	    (flyspell-mode)
+	    (turn-on-reftex)
+            (define-key latex-mode-map "\C-c\C-c" 'comment-region)
+            (define-key latex-mode-map "\C-c\C-f" 'my-latex-file)
+            (define-key latex-mode-map "\C-c\C-i" 'my-tex-bibtex-file)
+            (define-key latex-mode-map "\C-c\C-v" 'tex-view-pdf)
+	    (define-key latex-mode-map "\C-cx" 'reftex-reset-mode)))
+
+;;; reftex-default-bib
+(setq reftex-default-bibliography '("~/Dropbox/texwork/labo/hishigami.bib") )
+
+;; bibtex-mode hook
+(add-hook 'bibtex-mode-hook
+	  (lambda ()
+	    (turn-on-reftex)
+	    (flyspell-mode)))
+
+;;;
+;;; end of file
+;;;
